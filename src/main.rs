@@ -1,7 +1,10 @@
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows&")] // hide console window on Windows in release
 
 use eframe::egui;
 use egui::{text::LayoutJob, Vec2, *};
+
+mod file_system;
+mod hg_commands;
 
 const ICON: &str = ".\\icon.png";
 
@@ -24,6 +27,9 @@ fn main() {
 #[derive(Default)]
 struct MyApp {
     picked_path: Option<String>,
+    picked_branch: Option<String>,
+    repo_list: Option<Vec<String>>,
+
     n_items: usize,
     console_output: LayoutJob,
 }
@@ -34,6 +40,15 @@ impl eframe::App for MyApp {
             if ui.button("Select Project…").clicked() {
                 if let Some(path) = rfd::FileDialog::new().pick_folder() {
                     self.picked_path = Some(path.display().to_string());
+                    self.repo_list =
+                        file_system::find_repo_list(path.display().to_string()).unwrap();
+
+                    match &self.repo_list {
+                        Some(repo_list) => {
+                            self.picked_branch = Some(hg_commands::hg_branch(&repo_list[0]));
+                        }
+                        None => (),
+                    };
                 }
             }
 
@@ -48,10 +63,25 @@ impl eframe::App for MyApp {
                 });
             }
 
+            if let Some(picked_branch) = &self.picked_branch {
+                ui.horizontal(|ui| {
+                    ui.label("Current Branch:");
+                    ui.monospace(picked_branch);
+                });
+            } else {
+                ui.horizontal(|ui| {
+                    ui.label("No Project Selected");
+                });
+            }
+
             ui.separator();
 
             ui.collapsing("Commands", |ui| {
-                ui.horizontal(|ui| if ui.button("Status").clicked() {});
+                ui.horizontal(|ui| {
+                    if ui.button("Status").clicked() {
+                        hg_commands::hg_status(&self.repo_list, &mut self.console_output)
+                    }
+                });
                 ui.horizontal(|ui| {
                     if ui.button("Pull").clicked() {}
                     if ui.button("Push").clicked() {}
