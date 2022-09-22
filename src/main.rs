@@ -1,5 +1,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows&")] // hide console window on Windows in release
 
+use std::sync::mpsc;
+use std::sync::mpsc::{Receiver, Sender};
+use std::thread;
 use eframe::egui;
 use egui::{text::LayoutJob, Vec2, *};
 
@@ -14,17 +17,16 @@ fn main() {
             x: 400f32,
             y: 600f32,
         }),
-        icon_data: Some(load_icon(ICON)), // an example
+        icon_data: Some(load_icon(ICON)),
         ..Default::default()
     };
     eframe::run_native(
         "Rusty hg Manager",
         options,
-        Box::new(|_cc| Box::new(MyApp::default())),
+        Box::new(|_cc| Box::new(MyApp::new())),
     );
 }
 
-#[derive(Default)]
 struct MyApp {
     picked_path: Option<String>,
     picked_branch: Option<String>,
@@ -32,11 +34,28 @@ struct MyApp {
 
     n_items: usize,
     console_output: LayoutJob,
+    tx: Sender<String>,
+    rx: Receiver<String>,
+}
+
+impl MyApp {
+    fn new() -> Self {
+        let (tx, rx) = mpsc::channel();
+        MyApp {
+            picked_path: None,
+            picked_branch: None,
+            repo_list: None,
+            n_items: 0,
+            console_output: Default::default(),
+            tx: tx.clone(),
+            rx,
+        }
+    }
 }
 
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        egui::CentralPanel::default().show(ctx, |ui| {
+        CentralPanel::default().show(ctx, |ui| {
             if ui.button("Select Project…").clicked() {
                 if let Some(path) = rfd::FileDialog::new().pick_folder() {
                     self.picked_path = Some(path.display().to_string());
@@ -79,7 +98,7 @@ impl eframe::App for MyApp {
             ui.collapsing("Commands", |ui| {
                 ui.horizontal(|ui| {
                     if ui.button("Status").clicked() {
-                        hg_commands::hg_status(&self.repo_list, &mut self.console_output)
+                        hg_commands::hg_status(&self.repo_list, self.tx.clone())
                     }
                 });
                 ui.horizontal(|ui| {
@@ -97,6 +116,14 @@ impl eframe::App for MyApp {
             ui.label("Commands Output:");
 
             ui.separator();
+
+            for received in &self.rx {
+                self.console_output.append(
+                    &received,
+                    0f32,
+                    TextFormat::default(),
+                );
+            }
 
             let text_style = TextStyle::Body;
             let row_height = ui.text_style_height(&text_style);

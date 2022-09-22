@@ -1,5 +1,8 @@
 use egui::{text::LayoutJob, TextFormat};
 use std::process::Command;
+use std::str;
+use std::thread;
+use std::sync::mpsc;
 
 pub fn hg_branch(repo: &String) -> String {
     let mut cmd = if cfg!(target_os = "windows") {
@@ -16,60 +19,56 @@ pub fn hg_branch(repo: &String) -> String {
 
     let text = cmd
         .arg(os_arg)
-        .arg("cd ".to_owned() + repo + " & hg branch")
+        .arg("cd /D ".to_owned() + repo + " & hg branch")
         .output()
         .expect("failed to execute command");
 
     println!("{:?}", text);
 
-    let text = cmd
-        .arg(os_arg)
-        .arg("hg branch")
-        .output()
-        .expect("failed to execute command");
-
-    println!("{:?}", text);
-
-    format!("{:?}", text)
+    String::from_utf8(text.stdout).unwrap()
 }
 
-pub fn hg_status(repo_list: &Option<Vec<String>>, job: &mut LayoutJob) {
-    match repo_list {
-        Some(repo_list) => {
-            let mut cmd = if cfg!(target_os = "windows") {
-                Command::new("cmd")
-            } else {
-                Command::new("sh")
-            };
+pub fn hg_status(repo_list: &Option<Vec<String>>, tx: mpsc::Sender<String>) {
+    let repo_list = repo_list.clone();
+    thread::spawn(move || {
+        match repo_list {
+            Some(repo_list) => {
+                let mut cmd = if cfg!(target_os = "windows") {
+                    Command::new("cmd")
+                } else {
+                    Command::new("sh")
+                };
 
-            let os_arg = if cfg!(target_os = "windows") {
-                "/C"
-            } else {
-                "-c"
-            };
+                let os_arg = if cfg!(target_os = "windows") {
+                    "/C"
+                } else {
+                    "-c"
+                };
 
-            for repo in repo_list {
-                cmd.current_dir(repo);
 
-                let text = cmd
-                    .arg(os_arg)
-                    .arg("hg outgoing -n -q")
-                    .output()
-                    .expect("failed to execute command");
+                for repo in repo_list {
+                    let text = cmd
+                        .arg(os_arg)
+                        .arg("cd /D ".to_owned() + &repo + " & hg outgoing -n")
+                        .output()
+                        .expect("failed to execute command");
 
-                job.append(&format!("{:?}", text), 0f32, TextFormat::default());
+                    tx.send(str::from_utf8(&text.stdout).unwrap().to_owned())
+                        .unwrap();
 
-                let text = cmd
-                    .arg(os_arg)
-                    .arg("hg status")
-                    .output()
-                    .expect("failed to execute command");
+                    let text = cmd
+                        .arg(os_arg)
+                        .arg("cd /D ".to_owned() + &repo + " & hg status")
+                        .output()
+                        .expect("failed to execute command");
 
-                job.append(&format!("{:?}", text), 0f32, TextFormat::default());
+                    tx.send(str::from_utf8(&text.stdout).unwrap().to_owned())
+                        .unwrap();
+                }
             }
+            None => (),
         }
-        None => (),
-    }
+    });
 }
 
 pub fn hg_pull(repo_list: &Option<Vec<String>>, job: &mut LayoutJob) {}
