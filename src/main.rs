@@ -1,10 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows&")] // hide console window on Windows in release
 
-use std::sync::mpsc;
-use std::sync::mpsc::{Receiver, Sender};
-use std::thread;
 use eframe::egui;
-use egui::{text::LayoutJob, Vec2, *};
+use egui::{Vec2, *};
 
 mod file_system;
 mod hg_commands;
@@ -15,13 +12,13 @@ fn main() {
     let options = eframe::NativeOptions {
         initial_window_size: Some(Vec2 {
             x: 400f32,
-            y: 600f32,
+            y: 220f32,
         }),
         icon_data: Some(load_icon(ICON)),
         ..Default::default()
     };
     eframe::run_native(
-        "Rusty hg Manager",
+        "Rusty Hydrargyrum Manager",
         options,
         Box::new(|_cc| Box::new(MyApp::new())),
     );
@@ -31,24 +28,14 @@ struct MyApp {
     picked_path: Option<String>,
     picked_branch: Option<String>,
     repo_list: Option<Vec<String>>,
-
-    n_items: usize,
-    console_output: LayoutJob,
-    tx: Sender<String>,
-    rx: Receiver<String>,
 }
 
 impl MyApp {
     fn new() -> Self {
-        let (tx, rx) = mpsc::channel();
         MyApp {
             picked_path: None,
             picked_branch: None,
             repo_list: None,
-            n_items: 0,
-            console_output: Default::default(),
-            tx: tx.clone(),
-            rx,
         }
     }
 }
@@ -56,6 +43,13 @@ impl MyApp {
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         CentralPanel::default().show(ctx, |ui| {
+            ui.horizontal(|ui| {
+                ui.menu_button("Help", Self::nested_menus);
+                if ui.button("About").clicked() {}
+            });
+
+            ui.separator();
+
             if ui.button("Select Project…").clicked() {
                 if let Some(path) = rfd::FileDialog::new().pick_folder() {
                     self.picked_path = Some(path.display().to_string());
@@ -98,7 +92,7 @@ impl eframe::App for MyApp {
             ui.collapsing("Commands", |ui| {
                 ui.horizontal(|ui| {
                     if ui.button("Status").clicked() {
-                        hg_commands::hg_status(&self.repo_list, self.tx.clone())
+                        hg_commands::hg_status(&self.repo_list)
                     }
                 });
                 ui.horizontal(|ui| {
@@ -110,32 +104,17 @@ impl eframe::App for MyApp {
                     if ui.button("Purge").clicked() {}
                 });
             });
-
-            ui.add_space(4.0);
-
-            ui.label("Commands Output:");
-
-            ui.separator();
-
-            for received in &self.rx {
-                self.console_output.append(
-                    &received,
-                    0f32,
-                    TextFormat::default(),
-                );
-            }
-
-            let text_style = TextStyle::Body;
-            let row_height = ui.text_style_height(&text_style);
-            ScrollArea::vertical().stick_to_bottom().show_rows(
-                ui,
-                row_height,
-                self.n_items,
-                |ui, _row_range| {
-                    ui.label(self.console_output.clone());
-                },
-            );
         });
+    }
+}
+
+impl MyApp {
+    fn nested_menus(ui: &mut egui::Ui) {
+        //ui.menu_button("Examples", |ui| {
+        if ui.button("Item1").clicked() {}
+        if ui.button("Item2").clicked() {}
+        if ui.button("Item3").clicked() {}
+        //});
     }
 }
 
