@@ -96,12 +96,18 @@ impl eframe::App for MyApp {
                     }
                 });
                 ui.horizontal(|ui| {
-                    if ui.button("Pull").clicked() {}
-                    if ui.button("Push").clicked() {}
+                    if ui.button("Pull").clicked() {
+                        hg_commands::hg_pull(&self.repo_list)
+                    }
+                    if ui.button("Push").clicked() {
+                        hg_commands::hg_push(&self.repo_list)
+                    }
                 });
                 ui.horizontal(|ui| {
                     if ui.button("Switch").clicked() {}
-                    if ui.button("Purge").clicked() {}
+                    if ui.button("Purge").clicked() {
+                        hg_commands::hg_purge(&self.repo_list)
+                    }
                 });
             });
         });
